@@ -16,7 +16,7 @@ Config file must be filled with a stanza specified as --account %PUT_A_NAME_HERE
 [%PUT_A_NAME_HERE%]
 cs_falcon_oauth2_cid = %YOUR_CID_HERE%
 cs_falcon_oauth2_key = %YOUR_KEY_HERE%
-cs_falcon_output_filename = %YOUR_OUT_FILENAME HERE%
+cs_falcon_output_filename = %YOUR_OUT_FILENAME_HERE%
 '''
 
 
@@ -45,7 +45,7 @@ def falcon_init_config(account):
         cs_falcon_output_filename = str(config.get(account, 'cs_falcon_output_filename'))
     except Exception as e:
         print "Check your config file {0} for section [{1}] and rerun the program, exiting...".format(config_file, account)
-        exit(-1)
+        exit(1)
     return (cs_falcon_oauth2_cid, cs_falcon_oauth2_key, cs_falcon_output_filename)
 
 
@@ -65,12 +65,10 @@ def cs_api_request(method, url, headers=None, params=None, data=None, json_data=
             print "             headers: {0} data: {1} params: {2}".format(headers, data, params)
         if method == 'GET':
             response = requests.get(url, headers=headers, params=params)
-            response.raise_for_status()
-            return_value = response.json()
         elif method == 'POST':
             response = requests.post(url, headers=headers, params=params, data=data, json=json_data)
-            response.raise_for_status()
-            return_value = response.json()
+        response.raise_for_status()
+        return_value = response.json()
         if args.debug: print "Request successful"
     except requests.exceptions.Timeout:
         print "API request timed out"
@@ -78,21 +76,18 @@ def cs_api_request(method, url, headers=None, params=None, data=None, json_data=
     except requests.exceptions.TooManyRedirects:
         print "API Too Many Redirects"
         exit(1)
+    except requests.exceptions.RequestException as err:
+        print err
+        exit(1)
     except requests.exceptions.HTTPError as err:
         if err.response.content:
             response_content = response.json()
             response_errors = response_content.get('errors')
             response_error_code = response_errors[0].get('code')
             if response_errors and len(response_errors) > 0 and response_error_code in (403, 409, 404):
-                return_value = {
-                    'error': True,
-                    'err_code': response_errors[0].get('code'),
-                    'err_msg': response_errors[0].get('message')}
-                return return_value
+                print "err_code: {0} err_msg: {1}".format(response_error_code, response_errors[0].get('message'))
+                exit(1)
         raise ValueError(err)
-    except requests.exceptions.RequestException as err:
-        print err
-        exit(1)
     # Tempo to protect from a max api rate limit
     time.sleep(cs_falcon_tempo)
     return return_value
